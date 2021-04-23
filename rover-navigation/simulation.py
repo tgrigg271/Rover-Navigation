@@ -1,4 +1,5 @@
 import numpy as np
+from copy import deepcopy
 
 
 def runge_kutta4(t0, dt, tf, x0, f):
@@ -20,7 +21,7 @@ def runge_kutta4(t0, dt, tf, x0, f):
     # Initialize time, state
     t = t0
     x = x0
-    for i_step in range(0, n_steps+1):
+    for i_step in range(0, n_steps):
         # Perform Integration
         k1 = dt*f(t, x)
         k2 = dt*f(t + 0.5*dt, x + 0.5*k1)
@@ -28,7 +29,7 @@ def runge_kutta4(t0, dt, tf, x0, f):
         k4 = dt*f(t + dt, x + k3)
         # Update time, state
         t += dt
-        x += (1.0/6.0)*(k1 + 2*k2 + 2*k3 + k4)
+        x = x + (1.0/6.0)*(k1 + 2*k2 + 2*k3 + k4)
         # Record Time, State
         ts.append(t)
         xs.append(x)
