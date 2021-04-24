@@ -1,2 +1,6 @@
 .idea
 venv
+
+.vscode/
+
+camera/__pycache__/
