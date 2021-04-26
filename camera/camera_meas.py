@@ -58,12 +58,13 @@ def get_camera_measure():
     if len(results) < 1:
         if PRINT_OUTPUTS > 0:
             print("No detection found.")
-        return -1
+        return -1  # We may want to modify this if we choose to have multiple outputs
     else:
         if PRINT_OUTPUTS > 0:
             print(len(results)," detections found. ")
     
     #   extract values
+    measurements= []  # List will be populated with dicts defining measurement
     for r in results:
         #   pose
         #   The pose matrix is the transpose of T matrix described in 
@@ -74,6 +75,8 @@ def get_camera_measure():
         rang = rang / 1000
         #   Tag ID
         tagid = r.tag_id
+        meas = {'pose': pose, 'id': tagid}  # TODO: Add TOV calculation/output
+        measurements.append(meas)
 
         if EXPORT_IMAGE > 0:
             # draw the bounding box of apriltag detection
@@ -94,9 +97,8 @@ def get_camera_measure():
             #   Calculate range and displaty
             rngTxt = "Rng %6.3f" % rang
             cv2.putText(image, rngTxt, (ptA[0], ptA[1] - 15), 
-                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
-
-
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+        
         if PRINT_OUTPUTS > 0:
             print("Tag ID : ", tagid)
 
@@ -106,5 +108,5 @@ def get_camera_measure():
         cv2.waitKey(2)
 
     #   report pose, tagID, time of validity
-    return 0  
+    return meas 
 
