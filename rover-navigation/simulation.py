@@ -37,3 +37,7 @@ def runge_kutta4(t0, dt, tf, x0, f):
         xs.append(x)
         dxs.append(dx/dt)
     return ts, xs, dxs
+
+
+def sample_time_update_flag(t, dt, t_sample):
+    return np.mod(t, t_sample) - dt < 0

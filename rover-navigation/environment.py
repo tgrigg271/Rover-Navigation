@@ -20,8 +20,8 @@ def init_circular_table(radius=10, n_markers=10):
         r = np.random.uniform(radius)
         theta = np.random.uniform(2*np.pi)
         x, y = (r*np.cos(theta), r*np.sin(theta))
-        position = np.array([x, y])
-        id = np.random.randint(997)
+        position = np.array([[x], [y]])
+        id = np.random.randint(586)  # Tag family 36h11
         markers.append(make_april_tag(position, id))
     env_params['markers'] = markers
     return env_params
