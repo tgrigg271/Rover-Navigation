@@ -17,8 +17,11 @@ def init_sim():
     # Rover Dynamics
     sim_params['rover'] = dynamics.init_rover()
     # Sensors
+    sim_params['sensors'] = dict()
+    sim_params['sensors']['accelerometer'] = sensors.init_accelerometer()
     sim_params['sensors']['gyroscope'] = sensors.init_gyroscope()
-    # sim_params['sensors']['gyro'] = sensors.init_gyro()
+    sim_params['sensors']['magnetometer'] = sensors.init_magnetometer()
+    sim_params['sensors']['camera'] = sensors.init_camera()
     # Environment
     sim_params['environment'] = environment.init_circular_table()
     return sim_params
@@ -99,10 +102,10 @@ if __name__ == "__main__":
     # Run simulation
     for t in times:
         env = environment.circular_table(t, sim_params)
-        measurements = sensors.imu_camera(t, rover_state, env, sim_params, use_truth=True)
-        estimate = navigation.slam(t, estimate, measurements, sim_params, use_truth=True)
-        cmd = control.waypoint_following(t, estimate, sim_params)
-        rover_state = dynamics.no_slip_dynamics(t, rover_state, env, cmd, sim_params)
+        measurements = sensors.imu_camera(t, rover_state, env, sim_params)
+        estimate = navigation.slam(t, estimate, measurements, sim_params)
+        cmd = control.waypoint_following(t, rover_state, estimate, sim_params, use_truth=True)
+        rover_state, d_rover_state = dynamics.no_slip_dynamics(t, rover_state, env, cmd, sim_params)
         sim_out = write_sim_output(t, sim_out, env, measurements, estimate, cmd, rover_state)
     # Print/store outputs
     print(rover_state)

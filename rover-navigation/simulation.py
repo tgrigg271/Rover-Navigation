@@ -35,5 +35,5 @@ def runge_kutta4(t0, dt, tf, x0, f):
         # Record Time, State
         ts.append(t)
         xs.append(x)
-        dx.append(dx/dt)
+        dxs.append(dx/dt)
     return ts, xs, dxs
