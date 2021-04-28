@@ -13,11 +13,11 @@ K = [[2.48891613e+03, 0.00000000e+00, 1.64425025e+03],
     [0.00000000e+00, 2.45741844e+03, 1.32156550e+03] ,
     [0.00000000e+00, 0.00000000e+00, 1.00000000e+00]]
 CAM_CAL_PARAMS = [K[0][0],K[1][1],K[2][0],K[2][1]]
-TAG_SIZE = 74 # mm? These units need to be verified
+TAG_SIZE = 81.3 # mm? These units need to be verified
 TAG_FAMILY = "tag36h11"
 
 # i/o
-IN_IMG_FILE = "camera/img/tmp_image.jpg"
+IN_IMG_FILE = "./img/tmp_image.jpg"
 PRINT_OUTPUTS = 0   # print flag
 EXPORT_IMAGE = 0
 
@@ -75,7 +75,7 @@ def get_camera_measure():
         rang = rang / 1000
         #   Tag ID
         tagid = r.tag_id
-        meas = {'pose': pose, 'id': tagid}  # TODO: Add TOV calculation/output
+        meas = {'pose': pose, 'id': tagid, 'tov': tov} 
         measurements.append(meas)
 
         if EXPORT_IMAGE > 0:
