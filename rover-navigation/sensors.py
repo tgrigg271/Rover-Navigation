@@ -62,7 +62,7 @@ def magnetometer(t, state, environment, params):
 
 
 # Camera ---------------------------------------------------------------------------------------------------------------
-def init_camera(rang=10, fov=(-10, 10), r_sigma=0.1, az_sigma=0.001, t_sample=1):
+def init_camera(rang=10, fov=(-1, 1), r_sigma=0.1, az_sigma=0.001, t_sample=0.1):
     camera_params = dict()
     camera_params['range'] = rang
     camera_params['field_of_view'] = fov
@@ -74,7 +74,7 @@ def init_camera(rang=10, fov=(-10, 10), r_sigma=0.1, az_sigma=0.001, t_sample=1)
 
 def camera(t, state, environment, params):
     # Parse inputs
-    rover_pos = state[0:2, 0]  # X,Y position
+    rover_pos = state[0:2]  # X,Y position
     heading = state[3, 0]  # Heading angle
     markers = environment['markers']
     # Sim params
@@ -87,29 +87,32 @@ def camera(t, state, environment, params):
     t_sample = params['sensors']['camera']['t_sample']
     # Initialize measurement list, remains empty if no measurements available
     measurements = []
-    for marker in markers:
-        tag_pos = marker['position']
-        tag_id = marker['id']
-        rel_pos = tag_pos - rover_pos
-        slant_range = np.linalg.norm(rel_pos)
-        los = np.arctan2(rel_pos[1, 0], rel_pos[0, 0]) - heading
-        in_view = slant_range < max_range and fov[0] < los < fov[1]
-        new_sample = simulation.sample_time_update_flag(t, dt, t_sample)
-        if in_view and new_sample:
-            # Add measurement noise
-            slant_range += np.random.normal(0, r_sigma)
-            los += np.random.normal(0, az_sigma)
-            # Define pose matrix, assumes no rotation of tag and no vertical displacement. We may want to relax these
-            # assumptions
-            # Transpose of matrix T defined at https://www.mathworks.com/help/images/ref/rigid3d.html
-            pose = np.array([
-                [1, 0, 0, slant_range*np.cos(los)],
-                [0, 1, 0, slant_range*np.sin(los)],
-                [0, 0, 1, 0],
-                [0, 0, 0, 1]])
-            meas = {'pose': np.array(pose), 'id': tag_id}
-            measurements.append(meas)
-    return measurements
+    new_sample = simulation.sample_time_update_flag(t, dt, t_sample)  # Check for new frame from camera.
+    if new_sample:
+        for marker in markers:
+            tag_pos = marker['position']
+            tag_id = marker['id']
+            rel_pos = tag_pos - rover_pos
+            slant_range = np.linalg.norm(rel_pos)
+            los = np.arctan2(rel_pos[1, 0], rel_pos[0, 0]) - heading
+            in_view = slant_range < max_range and fov[0] < los < fov[1]
+            if in_view:
+                # Add measurement noise
+                slant_range += np.random.normal(0, r_sigma)
+                los += np.random.normal(0, az_sigma)
+                # Define pose matrix, assumes no rotation of tag and no vertical displacement. We may want to relax these
+                # assumptions
+                # Transpose of matrix T defined at https://www.mathworks.com/help/images/ref/rigid3d.html
+                pose = np.array([
+                    [1, 0, 0, slant_range*np.cos(los)],
+                    [0, 1, 0, slant_range*np.sin(los)],
+                    [0, 0, 1, 0],
+                    [0, 0, 0, 1]])
+                meas = {'pose': np.array(pose), 'id': tag_id}
+                measurements.append(meas)
+    else:
+        measurements = None
+    return measurements  # None for no available measurement, [] for no tags in view.
 
 
 # Define Sensor Packages

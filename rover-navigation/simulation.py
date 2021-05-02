@@ -39,5 +39,9 @@ def runge_kutta4(t0, dt, tf, x0, f):
     return ts, xs, dxs
 
 
-def sample_time_update_flag(t, dt, t_sample):
-    return np.mod(t, t_sample) - dt < 0
+def sample_time_update_flag(t, dt, t_sample, tol=1e-5):
+    x = np.mod(t, t_sample)
+    hit = x < tol*dt
+    diff = t_sample - x - dt*0.9
+    near_miss = diff < 0
+    return hit or near_miss  # Second term should handle misses due to numeric precision.

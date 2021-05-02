@@ -8,6 +8,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
+# Initialization -------------------------------------------------------------------------------------------------------
 def init_sim():
     sim_params = dict()
     # Time
@@ -27,6 +28,7 @@ def init_sim():
     return sim_params
 
 
+# Output/Plots ---------------------------------------------------------------------------------------------------------
 def write_sim_output(t, sim_out, env, measurements, estimate, cmd, rover_state):
     """
     Writes the state of the simulation over time for convenient post-processing and visualization. Currently stores
@@ -49,6 +51,18 @@ def write_sim_output(t, sim_out, env, measurements, estimate, cmd, rover_state):
         sim_out['command'].append(cmd)
         sim_out['rover_state'].append(rover_state)
     return sim_out
+
+
+def extract_measurements(sim_out, meas_name):
+    samples = sim_out['measurements']
+    ts = []
+    measurements = []
+    for i_sample, sample in enumerate(samples):
+        meas = sample[meas_name]
+        if meas is not None:
+            ts.append(sim_out['time'][i_sample])
+            measurements.append(meas)
+    return ts, measurements
 
 
 def plot_rover_states(sim_out):
@@ -88,6 +102,37 @@ def plot_rover_states(sim_out):
     pass
 
 
+def plot_map(sim_out, sim_params):
+    environment = sim_out['environment'][0]
+    rover_state = sim_out['rover_state'][0]
+    fig, ax = plt.subplots()
+    # Plot rover position
+    ax.plot(rover_state[0], rover_state[1], 'r^')
+    # Plot table
+    radius = sim_params['environment']['radius']
+    table_outline = plt.Circle((0, 0), radius, color='b', fill=False)
+    ax.add_patch(table_outline)
+    # Plot AprilTags/Camera Markers
+    markers = environment['markers']
+    mark_xs = []
+    mark_ys = []
+    for marker in markers:
+        x, y = (marker['position'][0], marker['position'][1])
+        mark_xs.append(x)
+        mark_ys.append(y)
+    ax.plot(mark_xs, mark_ys, 'bo')
+    # Let the table fill the figure
+    ax.axis('equal')
+    ax.set(xlim=(-radius, radius), ylim=(-radius, radius))
+    plt.show()
+    pass
+
+
+def plot_measurements(sim_out):
+    cam_meas = extract_measurements(sim_out, 'camera')
+    pass
+
+
 # Main -----------------------------------------------------------------------------------------------------------------
 if __name__ == "__main__":
     sim_params = init_sim()
@@ -108,5 +153,6 @@ if __name__ == "__main__":
         rover_state, d_rover_state = dynamics.no_slip_dynamics(t, rover_state, env, cmd, sim_params)
         sim_out = write_sim_output(t, sim_out, env, measurements, estimate, cmd, rover_state)
     # Print/store outputs
-    print(rover_state)
     plot_rover_states(sim_out)
+    plot_measurements(sim_out)
+    plot_map(sim_out, sim_params)

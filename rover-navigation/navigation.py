@@ -7,3 +7,4 @@ def init_slam():
 
 def slam(t, estimate, measurements, sim_params):
     estimate = measurements  # Temporary placeholder
+    return estimate
