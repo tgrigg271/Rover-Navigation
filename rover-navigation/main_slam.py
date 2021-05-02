@@ -25,6 +25,8 @@ def init_sim():
     sim_params['sensors']['camera'] = sensors.init_camera()
     # Environment
     sim_params['environment'] = environment.init_circular_table()
+    # SLAM
+    sim_params['slam'] = navigation.init_slam()
     return sim_params
 
 
@@ -141,7 +143,7 @@ if __name__ == "__main__":
     # Initialize simulation
     times = np.arange(sim_params['t0'], sim_params['tf'], sim_params['dt'])
     rover_state = sim_params['rover']['ics']
-    estimate = navigation.init_slam()
+    estimate = sim_params['slam']['estimate']
     sim_out = None  # Initialize as empty
     # sim_out = write_sim_output(t, sim_out, env, measurements, estimate, cmd, rover_state)
     # Run simulation
