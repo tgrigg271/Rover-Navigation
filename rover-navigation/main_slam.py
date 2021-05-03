@@ -119,6 +119,10 @@ def plot_map(sim_out, sim_params, i_sample=0):
     x, y = (rover_state_hist[:, 0], rover_state_hist[:, 1])
     # Rover XY Trajectory
     ax.plot(x, y, 'k')
+    ax.set_title(f"Environment Map, t={i_sample*sim_params['dt']:.2f}")
+    ax.set_xlabel('X (m)')
+    ax.set_ylabel('Y (m)')
+
 
     # Plot rover position
     ax.plot(rover_state[0], rover_state[1], 'g^')
@@ -151,6 +155,23 @@ def plot_map(sim_out, sim_params, i_sample=0):
     rover_pos_cov = estimate['cov'][0:2, 0:2]
     ax.plot(rover_pos[0], rover_pos[1], 'r^')
     navigation.covariance_ellipse(rover_pos, rover_pos_cov, ax, edgecolor='red')
+
+    # Plot landmark position estimate
+    marker_states = estimate['state'][3:]
+    marker_cov = estimate['cov'][2:, 2:]
+    n_markers = int(len(marker_states)/2)  # Guaranteed to be even number, so no worries.
+    mark_xs = []
+    mark_ys = []
+    for i_marker in range(n_markers):
+        k_mark = 2*i_marker
+        mark_xs.append(marker_states[k_mark, 0])
+        mark_ys.append(marker_states[k_mark+1, 0])
+    ax.plot(mark_xs, mark_ys, 'gs')
+    for i_marker in range(n_markers):
+        k_mark = 2*i_marker
+        mark_pos = np.array([[mark_xs[i_marker]], [mark_ys[i_marker]]])
+        mark_cov = marker_cov[k_mark:k_mark+2, k_mark:k_mark+2]
+        navigation.covariance_ellipse(mark_pos, mark_cov, ax, edgecolor='green')
 
     # Let the table fill the figure
     ax.axis('equal')
@@ -192,14 +213,19 @@ def plot_estimate(sim_out):
     ax[0].plot(time, x_hat - x, 'r')
     ax[0].plot(time, 3*np.sqrt(x_hat_cov), 'k')
     ax[0].plot(time, -3*np.sqrt(x_hat_cov), 'k')
+    ax[0].set_title('Rover State Estimate')
+    ax[0].set_ylabel('dX')
     # Y Position
     ax[1].plot(time, y_hat - y, 'r')
     ax[1].plot(time, 3*np.sqrt(y_hat_cov), 'k')
     ax[1].plot(time, -3*np.sqrt(y_hat_cov), 'k')
+    ax[1].set_ylabel('dY')
     # Psi
     ax[2].plot(time, control.wrap(psi_hat - psi, -np.pi, np.pi), 'r')
     ax[2].plot(time, 3*np.sqrt(psi_hat_cov), 'k')
     ax[2].plot(time, -3*np.sqrt(psi_hat_cov), 'k')
+    ax[2].set_ylabel('dPsi')
+    ax[2].set_xlabel('Time (s)')
     plt.draw()
 
 def plot_measurements(sim_out):
