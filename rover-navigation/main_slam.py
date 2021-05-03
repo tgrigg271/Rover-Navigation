@@ -6,6 +6,7 @@ import control
 import dynamics
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.patches import Wedge
 
 
 # Initialization -------------------------------------------------------------------------------------------------------
@@ -47,13 +48,12 @@ def write_sim_output(t, sim_out, env, measurements, estimate, cmd, rover_state):
     """
     if sim_out is None:
         sim_out = {'time': [], 'environment': [], 'measurements': [], 'estimate': [], 'command': [], 'rover_state': []}
-    else:
-        sim_out['time'].append(t)
-        sim_out['environment'].append(env)
-        sim_out['measurements'].append(measurements)
-        sim_out['estimate'].append(estimate)
-        sim_out['command'].append(cmd)
-        sim_out['rover_state'].append(rover_state)
+    sim_out['time'].append(t)
+    sim_out['environment'].append(env)
+    sim_out['measurements'].append(measurements)
+    sim_out['estimate'].append(estimate)
+    sim_out['command'].append(cmd)
+    sim_out['rover_state'].append(rover_state)
     return sim_out
 
 
@@ -102,20 +102,32 @@ def plot_rover_states(sim_out):
     ax[1].plot(time, r)
     ax[1].set_ylabel('r (m)')
     ax[1].set_xlabel('Time (s)')
-    plt.show()
+    plt.draw()
     pass
 
 
-def plot_map(sim_out, sim_params):
-    environment = sim_out['environment'][0]
-    rover_state = sim_out['rover_state'][0]
+def plot_map(sim_out, sim_params, i_sample=0):
+    environment = sim_out['environment'][i_sample]
+    rover_state = sim_out['rover_state'][i_sample]
+    estimate = sim_out['estimate'][i_sample]
     fig, ax = plt.subplots()
+
     # Plot rover position
-    ax.plot(rover_state[0], rover_state[1], 'r^')
+    ax.plot(rover_state[0], rover_state[1], 'g^')
+
+    # Plot camera field of view
+    rang = sim_params['sensors']['camera']['range']
+    fov = sim_params['sensors']['camera']['field_of_view']
+    psi = rover_state[2, 0]
+    fov_wedge = Wedge(rover_state[0:2, 0], rang, (fov[0]-psi)*180/np.pi, (fov[1]-psi)*180/np.pi,
+                      edgecolor='black', facecolor='orange')
+    ax.add_patch(fov_wedge)
+
     # Plot table
     radius = sim_params['environment']['radius']
     table_outline = plt.Circle((0, 0), radius, color='b', fill=False)
     ax.add_patch(table_outline)
+
     # Plot AprilTags/Camera Markers
     markers = environment['markers']
     mark_xs = []
@@ -124,11 +136,18 @@ def plot_map(sim_out, sim_params):
         x, y = (marker['position'][0], marker['position'][1])
         mark_xs.append(x)
         mark_ys.append(y)
-    ax.plot(mark_ys, mark_xs, 'bo')
+    ax.plot(mark_xs, mark_ys, 'bo')
+
+    # Plot rover position estimate
+    rover_pos = estimate['state'][0:2]
+    rover_pos_cov = estimate['cov'][0:2, 0:2]
+    ax.plot(rover_pos[0], rover_pos[1], 'r^')
+    navigation.covariance_ellipse(rover_pos, rover_pos_cov, ax, edgecolor='red')
+
     # Let the table fill the figure
     ax.axis('equal')
     ax.set(xlim=(-radius, radius), ylim=(-radius, radius))
-    plt.show()
+    plt.draw()
     pass
 
 
@@ -163,4 +182,6 @@ if __name__ == "__main__":
     plot_rover_states(sim_out)
     plot_measurements(sim_out)
     plot_map(sim_out, sim_params)
+    plot_map(sim_out, sim_params, len(times)-1)
+    plt.show()
     pass

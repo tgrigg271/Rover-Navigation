@@ -1,19 +1,77 @@
-
 import numpy as np
+from copy import deepcopy
 from scipy.spatial.transform import rotation as rot
+import matplotlib.pyplot as plt
+from matplotlib.patches import Ellipse
+import matplotlib.transforms as transforms
 
 
-def cv_state_prediction(dt, rover_state, v=1):
+def covariance_ellipse(mean, cov, ax, n_std=3.0, facecolor='none', **kwargs):
+    """
+    Create a plot of the covariance confidence ellipse of *x* and *y*.
+    Take from: https://matplotlib.org/devdocs/gallery/statistics/confidence_ellipse.html
+
+    Parameters
+    ----------
+    mean : array-like, shape (n, )
+        Sample mean, center of ellipse
+
+    cov: array-like, shape (n, n)
+        Sample covariance
+
+    ax : matplotlib.axes.Axes
+        The axes object to draw the ellipse into.
+
+    n_std : float
+        The number of standard deviations to determine the ellipse's radiuses.
+
+    **kwargs
+        Forwarded to `~matplotlib.patches.Ellipse`
+
+    Returns
+    -------
+    matplotlib.patches.Ellipse
+    """
+
+    pearson = cov[0, 1]/np.sqrt(cov[0, 0] * cov[1, 1])
+    # Using a special case to obtain the eigenvalues of this
+    # two-dimensionl dataset.
+    ell_radius_x = np.sqrt(1 + pearson)
+    ell_radius_y = np.sqrt(1 - pearson)
+    ellipse = Ellipse((0, 0), width=ell_radius_x * 2, height=ell_radius_y * 2,
+                      facecolor=facecolor, **kwargs)
+
+    # Calculating the standard deviation of x from
+    # the square root of the variance and multiplying
+    # with the given number of standard deviations.
+    scale_x = np.sqrt(cov[0, 0]) * n_std
+    mean_x = mean[0, 0]
+
+    # calculating the stdandard deviation of y ...
+    scale_y = np.sqrt(cov[1, 1]) * n_std
+    mean_y = mean[1, 0]
+
+    transf = transforms.Affine2D() \
+        .rotate_deg(45) \
+        .scale(scale_x, scale_y) \
+        .translate(mean_x, mean_y)
+
+    ellipse.set_transform(transf + ax.transData)
+    return ax.add_patch(ellipse)
+
+
+def cv_state_prediction(dt, rover_state, cmd, v=1):
     x, y, psi = (rover_state[0], rover_state[1], rover_state[2])
-    u = 0
+    u = 0  # TODO: Update this to transform cmd from wheel speeds to heading rate.
     rover_state_proj = np.zeros((3, 1))
     rover_state_proj[0] = x + v*dt*np.cos(psi)
     rover_state_proj[1] = y + v*dt*np.sin(psi)
-    rover_state_proj[2] = psi + u*dt  # Should add heading rate control here.
+    rover_state_proj[2] = psi + u*dt
+    return rover_state_proj
 
 
 def cv_state_transition(dt, rover_state, v=1):
-    psi = rover_state[2]
+    psi = rover_state[2, 0]
     phi = np.array([
         [1, 0, -v*dt*np.sin(psi)],
         [0, 1, v*dt*np.cos(psi)],
@@ -172,10 +230,45 @@ def init_slam(pos_var=1e-3, vbx_var=1, heading_var=1e-4, r_var=0.1, rang_var=0.5
     return slam_params
 
 
-def slam_predict(t, estimate, cmd):
+def slam_predict(t, estimate, cmd, sim_params):
     # No-op for t==0,
     if t == 0:
         return estimate
+
+    # Parse Inputs
+    dt = sim_params['dt']  # Propagate at every sim time step
+    n_rover_states = 3  # Hardcode it lol
+    Q = sim_params['slam']['Q']
+    n_Q = Q.shape[0]
+    state = estimate['state']
+    rover_state = state[0:n_rover_states, 0]
+    f_prop = sim_params['slam']['f_prediction']
+    f_phi = sim_params['slam']['f_transition']
+
+    # Propagate rover state, marker states unchanged
+    rover_state = f_prop(dt, rover_state, cmd)
+    estimate['state'][0:n_rover_states] = rover_state
+
+    # Propagate rover covariance
+    phi = f_phi(dt, rover_state)  # Assumes constant velocity of 1 m/s
+    psi = rover_state[2, 0]
+    G = np.zeros((n_rover_states, n_Q))
+    G[0, 0] = dt*np.cos(psi)
+    G[1, 0] = dt*np.sin(psi)
+    G[2, 1] = dt
+    rover_cov = estimate['cov'][0:n_rover_states, 0:n_rover_states]
+    rover_cov = phi @ rover_cov @ phi.T + G @ Q @ G.T
+    estimate['cov'][0:n_rover_states, 0:n_rover_states] = rover_cov
+
+    # Update rover/landmark covariance
+    cov = estimate['cov']
+    for i_id, tag_id in enumerate(estimate['mapped_ids']):
+        k_mark = 2*i_id + n_rover_states
+        P_rl = cov[0:n_rover_states, k_mark:k_mark+2]
+        P_rl = phi @ P_rl
+        cov[0:n_rover_states, k_mark:k_mark+2] = P_rl
+        cov[k_mark:k_mark+2, 0:n_rover_states] = P_rl.T
+    estimate['cov'] = cov
     return estimate
 
 
@@ -302,8 +395,10 @@ def slam_augment(t, estimate, measurements, sim_params):
 
 
 def slam(t, estimate, measurements, cmd, sim_params):
+    estimate = deepcopy(estimate)  # Break link between estiamtes at different timesteps.
+
     # Project state estimate
-    estimate = slam_predict(t, estimate, cmd)
+    estimate = slam_predict(t, estimate, cmd, sim_params)
     # Update SLAM
     estimate = slam_update(t, estimate, measurements, sim_params)
 
