@@ -1,3 +1,4 @@
+
 import numpy as np
 from scipy.spatial.transform import rotation as rot
 
@@ -27,10 +28,10 @@ def cart_to_polar(cart, psi=0):
     return np.array([[r], [theta]])
 
 
-def polar_to_cart(pol, psi):
-    r, theta = (pol[0], pol[1])
-    x = r*np.cos(theta)
-    y = r*np.sin(theta)
+def polar_to_cart(pol, psi=0):
+    r, theta = (pol[0, 0], pol[1, 0])
+    x = r*np.cos(theta + psi)
+    y = r*np.sin(theta + psi)
     cart = np.array([[x], [y]])  # Probably shouldn't hardcode this to be a two element column vector?
     return cart
 
@@ -43,10 +44,10 @@ def cv_meas_model(rover_state, marker):
     return meas
 
 
-def cv_meas_jacobian(rover_state, marker):
+def cv_meas_jacobian_rover(rover_state, marker_state):
     H = np.zeros((2, 3))
-    dx = marker['position'][0] - rover_state[0]
-    dy = marker['position'][1] - rover_state[1]
+    dx = marker_state[0] - rover_state[0]
+    dy = marker_state[1] - rover_state[1]
     rang = np.linalg.norm([dx, dy])
     rang2 = rang**2
     H[0][0] = -dx/rang
@@ -54,6 +55,19 @@ def cv_meas_jacobian(rover_state, marker):
     H[1][0] = dy/rang2
     H[1][1] = -dx/rang2
     H[1][2] = -1
+    return H
+
+
+def cv_meas_jacobian_mark(rover_state, marker_state):
+    H = np.zeros((2,2))
+    dx = marker_state[0] - rover_state[0]
+    dy = marker_state[1] - rover_state[1]
+    rang = np.linalg.norm([dx, dy])
+    rang2 = rang**2
+    H[0][0] = dx/rang
+    H[0][1] = dy/rang
+    H[1][0] = -dy/rang2
+    H[1][1] = dx/rang2
     return H
 
 
@@ -114,7 +128,7 @@ def find_old_makers(vis_markers, estimate):
     # Get set of new IDs not in the SLAM filter memory.
     vis_ids = set([marker['id'] for marker in vis_markers])
     known_ids = set(estimate['mapped_ids'])
-    old_ids = known_ids - vis_ids
+    old_ids = known_ids.intersection(vis_ids)
     # Collect marker observations associated with new IDs.
     old_markers = []
     for marker in vis_markers:
@@ -144,8 +158,8 @@ def init_slam(pos_var=1e-3, vbx_var=1, heading_var=1e-4, r_var=0.1, rang_var=0.5
     # Process Noise
     slam_params['Q'] = np.diag((vbx_var, r_var))
     # Measurement Model
-    slam_params['f_meas'] = cv_meas_model
-    slam_params['H_meas'] = cv_meas_jacobian
+    slam_params['f_meas'] = cv_meas_model  # Not using this now, but we should. I chose dev time over flexibility.
+    slam_params['H_meas'] = cv_meas_jacobian_rover
     # Sensor Noise
     slam_params['R'] = np.diag((rang_var, ang_var))
     # Initialize Estimate
@@ -158,35 +172,98 @@ def init_slam(pos_var=1e-3, vbx_var=1, heading_var=1e-4, r_var=0.1, rang_var=0.5
     return slam_params
 
 
-def slam_update(estimate, vis_markers, sim_params):
-    # No-op when no new camera measurement is available.
-    if vis_markers is None:
+def slam_predict(t, estimate, cmd):
+    # No-op for t==0,
+    if t == 0:
         return estimate
-
-    # Parse inputs
-    state = estimate['state']
-    x, y, psi = (state[0], state[1], state[2])
-    cov = estimate['cov']
-    R = sim_params['slam']['R']
-    # Find and add new markers
-    old_markers = find_old_makers(vis_markers, estimate)
-    for marker in old_markers:
-        pose = marker['pose']
-        tag_id = marker['id']
     return estimate
 
 
+def slam_update(t, estimate, measurements, sim_params):
+    # Parse inputs
+    state = estimate['state']
+    n_states = state.size
+    n_rover_states = 3
+    rover_state = state[0:n_rover_states]
+    cov = estimate['cov']
+    mapped_ids = estimate['mapped_ids']
+    vis_markers = measurements['camera']
+    R = sim_params['slam']['R']
 
-def slam_augment(estimate, vis_markers, sim_params):
     # No-op when no new camera measurement is available.
     if vis_markers is None:
         return estimate
 
+    # Find known markers we can see
+    vis_old_markers = find_old_makers(vis_markers, estimate)
+
+    # Build up block diagonal measurement matrix
+    n_meas = len(vis_old_markers)
+    if n_meas > 0:  # Perform update if measurements are available
+        R_vec = np.diagonal(R)  # Assume no off-diagonal terms
+        RR = np.diag(np.tile(R_vec, n_meas))
+        # Probably trash.
+        # n_meas = R.shape[0]
+        # n_RR = RR.shape[0]
+        # z_RR_R = np.zeros((n_meas, n_RR))
+        # z_R_RR = np.zeros((n_RR, n_meas))
+        # RR = np.block([[RR,     z_RR_R],
+        #                [z_R_RR, R]])
+
+        # Build up measurement matrix, vector
+        i_meas = 0
+        meas_dim = R.shape[0]
+        n_states = len(state)
+        H = np.zeros((meas_dim*n_meas, n_states))
+        z = np.zeros((0, 1))
+        zhat = np.zeros((0, 1))
+        for i_id, mapped_id in enumerate(mapped_ids):
+            marker = vis_markers[i_meas]
+            pose = marker['pose']
+            # Only update for known, visible markers
+            if marker['id'] == mapped_id:
+                # Array indices for building H
+                k_meas = i_meas*meas_dim  # Measurement index
+                k_mark = i_id*meas_dim  # Marker index
+                # Build measurement matrix, H
+                marker_state = state[k_mark+3:k_mark+5]
+                H[k_meas:k_meas+2, 0:n_rover_states] = cv_meas_jacobian_rover(rover_state, marker_state)
+                H[k_meas:k_meas+2, k_mark+n_rover_states:k_mark+n_rover_states+2] = cv_meas_jacobian_mark(rover_state,
+                                                                                                          marker_state)
+                # Build measurement vector, z
+                rel_pos_b = pose[0:2, 3:]
+                meas = cart_to_polar(rel_pos_b)
+                z = np.concatenate((z, meas), 0)
+                # Build predicted measurement vector, zhat
+                rel_pos = marker_state - rover_state[0:2]  # Rel position in inertial frame
+                meas_hat = cart_to_polar(rel_pos, rover_state[2, 0])  # Range/bearing in body frame
+                zhat = np.concatenate((zhat, meas_hat), 0)
+                i_meas += 1
+        # Calculate innovation
+        innov = z - zhat
+
+        # Update estimate
+        K = cov @ H.T @ np.linalg.inv(H @ cov @ H.T + RR)
+        state = state + K @ innov
+        cov = (np.eye(n_states) - K @ H) @ cov
+        cov = 1/2*(cov + np.transpose(cov))  # Enforce symmetry in the covariance matrix
+        estimate['state'] = state
+        estimate['cov'] = cov
+    return estimate
+
+
+def slam_augment(t, estimate, measurements, sim_params):
     # Parse inputs
     state = estimate['state']
     x, y, psi = (state[0], state[1], state[2])
     cov = estimate['cov']
+    vis_markers = measurements['camera']
     R = sim_params['slam']['R']
+
+    # No-op when no new camera measurement is available.
+    if vis_markers is None:
+        return estimate
+
     # Find and add new markers
     new_markers = find_new_makers(vis_markers, estimate)
     for marker in new_markers:
@@ -195,7 +272,7 @@ def slam_augment(estimate, vis_markers, sim_params):
 
         # Compute marker inertial position
         rel_pos_b = pose[0:2, 3:]
-        meas = cart_to_polar(rel_pos_b)  # Check cart_to_pol, second element is type array?
+        meas = cart_to_polar(rel_pos_b)
         r_mat = rot.Rotation.from_euler('z', psi)
         r_mat = r_mat.as_matrix()
         r_mat = r_mat[0, 0:2, 0:2]  # Provided as 3,3 but we want 2,2
@@ -219,19 +296,18 @@ def slam_augment(estimate, vis_markers, sim_params):
         cov = np.block([
             [cov,     P_rl_ml],
             [P_lr_lm, P_ll]])
+    estimate['state'] = state
+    estimate['cov'] = cov
     return estimate
 
 
-def slam(t, estimate, measurements, sim_params):
-    # Parse Inputs
-    vis_markers = measurements['camera']
-    dt = sim_params['dt']  # Run filter at sim sample time, updates happen at a lower rate.
-
+def slam(t, estimate, measurements, cmd, sim_params):
+    # Project state estimate
+    estimate = slam_predict(t, estimate, cmd)
     # Update SLAM
-    # Transform from pose matrix back to range/bearing measurement
-    # meas = cart_to_polar(dx, dy)
+    estimate = slam_update(t, estimate, measurements, sim_params)
 
     # Augment with new landmarks
-    estimate = slam_augment(estimate, vis_markers, sim_params)
+    estimate = slam_augment(t, estimate, measurements, sim_params)
 
     return estimate

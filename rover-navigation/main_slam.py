@@ -9,7 +9,9 @@ import matplotlib.pyplot as plt
 
 
 # Initialization -------------------------------------------------------------------------------------------------------
-def init_sim():
+def init_sim(seed=0):
+    # Control random number generation
+    np.random.seed(seed)
     sim_params = dict()
     # Time
     sim_params['t0'] = 0  # Seconds
@@ -122,7 +124,7 @@ def plot_map(sim_out, sim_params):
         x, y = (marker['position'][0], marker['position'][1])
         mark_xs.append(x)
         mark_ys.append(y)
-    ax.plot(mark_xs, mark_ys, 'bo')
+    ax.plot(mark_ys, mark_xs, 'bo')
     # Let the table fill the figure
     ax.axis('equal')
     ax.set(xlim=(-radius, radius), ylim=(-radius, radius))
@@ -140,17 +142,20 @@ if __name__ == "__main__":
     sim_params = init_sim()
     # Overwrite fields here as desired.
     # sim_params['tf'] = 15
+
     # Initialize simulation
     times = np.arange(sim_params['t0'], sim_params['tf'], sim_params['dt'])
     rover_state = sim_params['rover']['ics']
     estimate = sim_params['slam']['estimate']
+    cmd = control.waypoint_following(times[0], rover_state, estimate, sim_params, use_truth=True)
     sim_out = None  # Initialize as empty
     # sim_out = write_sim_output(t, sim_out, env, measurements, estimate, cmd, rover_state)
+
     # Run simulation
     for t in times:
         env = environment.circular_table(t, sim_params)
         measurements = sensors.imu_camera(t, rover_state, env, sim_params)
-        estimate = navigation.slam(t, estimate, measurements, sim_params)
+        estimate = navigation.slam(t, estimate, measurements, cmd, sim_params)
         cmd = control.waypoint_following(t, rover_state, estimate, sim_params, use_truth=True)
         rover_state, d_rover_state = dynamics.no_slip_dynamics(t, rover_state, env, cmd, sim_params)
         sim_out = write_sim_output(t, sim_out, env, measurements, estimate, cmd, rover_state)
@@ -158,3 +163,4 @@ if __name__ == "__main__":
     plot_rover_states(sim_out)
     plot_measurements(sim_out)
     plot_map(sim_out, sim_params)
+    pass
