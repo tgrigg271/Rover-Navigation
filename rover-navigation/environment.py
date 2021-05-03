@@ -10,19 +10,22 @@ def make_april_tag(position, tag_id):
     return tag
 
 
-def init_circular_table(radius=10, n_markers=10):
+def init_circular_table(radius=5, n_markers=100):
     env_params = dict()
     env_params['radius'] = radius
     env_params['n_markers'] = n_markers
     # Generate camera markers
     markers = []
+    rng = np.random.default_rng()
+    ids = rng.choice(586, size=n_markers, replace=False)  # Tag family 36h11.
+    ids = list(ids)
     for i_marker in range(n_markers):
         r = np.random.uniform(radius)
-        theta = np.random.uniform(2*np.pi)
+        theta = np.random.uniform(0, 2*np.pi)
         x, y = (r*np.cos(theta), r*np.sin(theta))
-        position = np.array([x, y])
-        id = np.random.randint(997)
-        markers.append(make_april_tag(position, id))
+        position = np.array([[x], [y]])
+        tag_id = ids.pop()
+        markers.append(make_april_tag(position, tag_id))
     env_params['markers'] = markers
     return env_params
 

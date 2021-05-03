@@ -52,5 +52,5 @@ def no_slip_dynamics(t, rover_state, env, cmd, params):
     dt = params['dt']
     tf = t0 + dt
     # Perform numeric integration
-    ts, xs = sim.runge_kutta4(t0, dt, tf, rover_state, f_rover)
-    return xs[-1]
+    ts, xs, dxs = sim.runge_kutta4(t0, dt, tf, rover_state, f_rover)
+    return xs[-1], dxs[-1]
