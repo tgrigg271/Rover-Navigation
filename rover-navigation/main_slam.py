@@ -10,7 +10,7 @@ from matplotlib.patches import Wedge
 
 
 # Initialization -------------------------------------------------------------------------------------------------------
-def init_sim(seed=0):
+def init_sim(seed=1):
     # Control random number generation
     np.random.seed(seed)
     sim_params = dict()
@@ -159,6 +159,49 @@ def plot_map(sim_out, sim_params, i_sample=0):
     pass
 
 
+def plot_estimate(sim_out):
+    time = sim_out['time']
+    # Extract state histories
+    rover_state = np.array(sim_out['rover_state'])
+    x, y, vbx, psi, r, w_l, w_r = (rover_state[:, 0], rover_state[:, 1], rover_state[:, 2], rover_state[:, 3],
+                                   rover_state[:, 4], rover_state[:, 5], rover_state[:, 6])
+    # Extract estimate histories
+    estimates = sim_out['estimate']
+    x_hat = []
+    y_hat = []
+    psi_hat = []
+    x_hat_cov = []
+    y_hat_cov = []
+    psi_hat_cov = []
+    for estimate in estimates:
+        x_hat.append(estimate['state'][0, 0])
+        y_hat.append(estimate['state'][1, 0])
+        psi_hat.append(estimate['state'][2, 0])
+        x_hat_cov.append(estimate['cov'][0, 0])
+        y_hat_cov.append(estimate['cov'][1, 1])
+        psi_hat_cov.append(estimate['cov'][2, 2])
+    x_hat = np.reshape(np.array(x_hat), x.shape)
+    y_hat = np.reshape(np.array(y_hat), x.shape)
+    psi_hat = np.reshape(np.array(psi_hat), x.shape)
+    x_hat_cov = np.reshape(np.array(x_hat_cov), x.shape)
+    y_hat_cov = np.reshape(np.array(y_hat_cov), x.shape)
+    psi_hat_cov = np.reshape(np.array(psi_hat_cov), x.shape)
+    # Plot Residuals
+    fig, ax = plt.subplots(3, 1)
+    # X Position
+    ax[0].plot(time, x_hat - x, 'r')
+    ax[0].plot(time, 3*np.sqrt(x_hat_cov), 'k')
+    ax[0].plot(time, -3*np.sqrt(x_hat_cov), 'k')
+    # Y Position
+    ax[1].plot(time, y_hat - y, 'r')
+    ax[1].plot(time, 3*np.sqrt(y_hat_cov), 'k')
+    ax[1].plot(time, -3*np.sqrt(y_hat_cov), 'k')
+    # Psi
+    ax[2].plot(time, control.wrap(psi_hat - psi, -np.pi, np.pi), 'r')
+    ax[2].plot(time, 3*np.sqrt(psi_hat_cov), 'k')
+    ax[2].plot(time, -3*np.sqrt(psi_hat_cov), 'k')
+    plt.draw()
+
 def plot_measurements(sim_out):
     cam_meas = extract_measurements(sim_out, 'camera')
     pass
@@ -168,13 +211,14 @@ def plot_measurements(sim_out):
 if __name__ == "__main__":
     sim_params = init_sim()
     # Overwrite fields here as desired.
-    # sim_params['tf'] = 15
+    sim_params['tf'] = 100
+    use_truth = True
 
     # Initialize simulation
     times = np.arange(sim_params['t0'], sim_params['tf'], sim_params['dt'])
     rover_state = sim_params['rover']['ics']
-    estimate = sim_params['slam']['estimate']
-    cmd = control.waypoint_following(times[0], rover_state, estimate, sim_params, use_truth=True)
+    a_pri_estimate = sim_params['slam']['estimate']
+    cmd = control.waypoint_following(times[0], rover_state, a_pri_estimate, sim_params, use_truth)
     sim_out = None  # Initialize as empty
     # sim_out = write_sim_output(t, sim_out, env, measurements, estimate, cmd, rover_state)
 
@@ -182,14 +226,15 @@ if __name__ == "__main__":
     for t in times:
         env = environment.circular_table(t, sim_params)
         measurements = sensors.imu_camera(t, rover_state, env, sim_params)
-        estimate = navigation.slam(t, estimate, measurements, cmd, sim_params)
-        cmd, sim_params = control.waypoint_following(t, rover_state, estimate, sim_params, use_truth=True)
+        post_estimate, a_pri_estimate = navigation.slam(t, a_pri_estimate, measurements, cmd, sim_params)
+        cmd, sim_params = control.waypoint_following(t, rover_state, post_estimate, sim_params, use_truth)
         rover_state, d_rover_state = dynamics.no_slip_dynamics(t, rover_state, env, cmd, sim_params)
-        sim_out = write_sim_output(t, sim_out, env, measurements, estimate, cmd, rover_state)
+        sim_out = write_sim_output(t, sim_out, env, measurements, post_estimate, cmd, rover_state)
     # Print/store outputs
     plot_rover_states(sim_out)
     plot_measurements(sim_out)
     plot_map(sim_out, sim_params)
     plot_map(sim_out, sim_params, len(times)-1)
+    plot_estimate(sim_out)
     plt.show()
     pass

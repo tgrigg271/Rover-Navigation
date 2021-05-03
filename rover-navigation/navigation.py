@@ -223,18 +223,18 @@ def marker_lookup(markers, tag_id):
     return None  # Return none if no marker matches
 
 
-def init_slam(pos_var=1e-3, vbx_var=1, heading_var=1e-4, r_var=0.1, rang_var=0.5, ang_var=0.01):
+def init_slam(pos_var=1e-3, vbx_var=1, heading_var=1e-4, r_var=0.1, rang_var=0.1**2, ang_var=0.001**2):
     slam_params = dict()
     # Dynamics
     slam_params['f_prediction'] = cv_state_prediction
     slam_params['f_transition'] = cv_state_transition
     # Process Noise
-    slam_params['Q'] = np.diag((vbx_var, r_var))
+    slam_params['Q'] = 5e-2*np.diag((vbx_var, r_var))
     # Measurement Model
     slam_params['f_meas'] = cv_meas_model  # Not using this now, but we should. I chose dev time over flexibility.
     slam_params['H_meas'] = cv_meas_jacobian_rover
     # Sensor Noise
-    slam_params['R'] = 1e2*np.diag((rang_var, ang_var))
+    slam_params['R'] = np.diag((rang_var, ang_var))
     # Initialize Estimate
     estimate = dict()
     # State: x, y, heading. I want to add vbx, but we'll get there.
@@ -417,9 +417,9 @@ def slam(t, estimate, measurements, cmd, sim_params):
     # Project state estimate
     estimate = slam_predict(t, estimate, cmd, sim_params)
     # Update SLAM
-    estimate = slam_update(t, estimate, measurements, sim_params)
+    a_post_estimate = slam_update(t, estimate, measurements, sim_params)
 
     # Augment with new landmarks
-    estimate = slam_augment(t, estimate, measurements, sim_params)
+    a_priori_estimate = slam_augment(t, estimate, measurements, sim_params)
 
-    return estimate
+    return a_post_estimate, a_priori_estimate

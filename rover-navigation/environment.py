@@ -10,7 +10,7 @@ def make_april_tag(position, tag_id):
     return tag
 
 
-def init_circular_table(radius=5, n_markers=25):
+def init_circular_table(radius=5, n_markers=100):
     env_params = dict()
     env_params['radius'] = radius
     env_params['n_markers'] = n_markers
@@ -21,7 +21,7 @@ def init_circular_table(radius=5, n_markers=25):
     ids = list(ids)
     for i_marker in range(n_markers):
         r = np.random.uniform(radius)
-        theta = np.random.uniform(2*np.pi)
+        theta = np.random.uniform(0, 2*np.pi)
         x, y = (r*np.cos(theta), r*np.sin(theta))
         position = np.array([[x], [y]])
         tag_id = ids.pop()

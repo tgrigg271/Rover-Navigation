@@ -62,12 +62,12 @@ def magnetometer(t, state, environment, params):
 
 
 # Camera ---------------------------------------------------------------------------------------------------------------
-def init_camera(rang=10, fov=(-1, 1), r_sigma=0.1, az_sigma=0.001, t_sample=0.1):
+def init_camera(rang=2.5, fov=(-0.5, 0.5), r_sigma=0.1, az_sigma=0.001, t_sample=0.1):
     camera_params = dict()
-    camera_params['range'] = rang
-    camera_params['field_of_view'] = fov
-    camera_params['range_sigma'] = r_sigma
-    camera_params['angle_sigma'] = az_sigma
+    camera_params['range'] = rang  # Detection range, meters
+    camera_params['field_of_view'] = fov  # +/-, radians
+    camera_params['range_sigma'] = r_sigma  # Range standard deviation, meters
+    camera_params['angle_sigma'] = az_sigma  # Angle standard deviation, radians
     camera_params['t_sample'] = t_sample
     return camera_params
 
