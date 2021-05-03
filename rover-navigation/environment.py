@@ -10,7 +10,7 @@ def make_april_tag(position, tag_id):
     return tag
 
 
-def init_circular_table(radius=10, n_markers=25):
+def init_circular_table(radius=5, n_markers=25):
     env_params = dict()
     env_params['radius'] = radius
     env_params['n_markers'] = n_markers

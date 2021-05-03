@@ -60,21 +60,29 @@ def covariance_ellipse(mean, cov, ax, n_std=3.0, facecolor='none', **kwargs):
     return ax.add_patch(ellipse)
 
 
-def cv_state_prediction(dt, rover_state, cmd, v=1):
-    x, y, psi = (rover_state[0], rover_state[1], rover_state[2])
-    u = 0  # TODO: Update this to transform cmd from wheel speeds to heading rate.
+def cv_state_prediction(dt, rover_state_est, cmd, sim_params):
+    # Parse Inputs
+    x, y, psi = (rover_state_est[0], rover_state_est[1], rover_state_est[2])
+    vbx = sim_params['control']['speed']  # Assume wheels are at commanded speed
+    w_l, w_r = cmd  # Assume wheels are at commanded speed
+    r_wheel = sim_params['rover']['r_wheel']
+    l_axle = sim_params['rover']['l_axle']
+
+    # Reconstruct command (Hardcoded relationship for now)
+    u = r_wheel/(2*l_axle)*(w_l - w_r)
     rover_state_proj = np.zeros((3, 1))
-    rover_state_proj[0] = x + v*dt*np.cos(psi)
-    rover_state_proj[1] = y + v*dt*np.sin(psi)
+    rover_state_proj[0] = x + vbx*dt*np.cos(psi)
+    rover_state_proj[1] = y + vbx*dt*np.sin(psi)
     rover_state_proj[2] = psi + u*dt
     return rover_state_proj
 
 
-def cv_state_transition(dt, rover_state, v=1):
+def cv_state_transition(dt, rover_state, sim_params):
+    vbx = sim_params['control']['speed']  # Assume wheels are at commanded speed
     psi = rover_state[2, 0]
     phi = np.array([
-        [1, 0, -v*dt*np.sin(psi)],
-        [0, 1, v*dt*np.cos(psi)],
+        [1, 0, -vbx*dt*np.sin(psi)],
+        [0, 1, vbx*dt*np.cos(psi)],
         [0, 0, 1]])
     return phi
 
@@ -208,6 +216,13 @@ def find_new_makers(vis_markers, estimate):
     return new_markers
 
 
+def marker_lookup(markers, tag_id):
+    for marker in markers:
+        if marker['id'] == tag_id:
+            return marker
+    return None  # Return none if no marker matches
+
+
 def init_slam(pos_var=1e-3, vbx_var=1, heading_var=1e-4, r_var=0.1, rang_var=0.5, ang_var=0.01):
     slam_params = dict()
     # Dynamics
@@ -219,7 +234,7 @@ def init_slam(pos_var=1e-3, vbx_var=1, heading_var=1e-4, r_var=0.1, rang_var=0.5
     slam_params['f_meas'] = cv_meas_model  # Not using this now, but we should. I chose dev time over flexibility.
     slam_params['H_meas'] = cv_meas_jacobian_rover
     # Sensor Noise
-    slam_params['R'] = np.diag((rang_var, ang_var))
+    slam_params['R'] = 1e2*np.diag((rang_var, ang_var))
     # Initialize Estimate
     estimate = dict()
     # State: x, y, heading. I want to add vbx, but we'll get there.
@@ -246,11 +261,11 @@ def slam_predict(t, estimate, cmd, sim_params):
     f_phi = sim_params['slam']['f_transition']
 
     # Propagate rover state, marker states unchanged
-    rover_state = f_prop(dt, rover_state, cmd)
+    rover_state = f_prop(dt, rover_state, cmd, sim_params)
     estimate['state'][0:n_rover_states] = rover_state
 
     # Propagate rover covariance
-    phi = f_phi(dt, rover_state)  # Assumes constant velocity of 1 m/s
+    phi = f_phi(dt, rover_state, sim_params)
     psi = rover_state[2, 0]
     G = np.zeros((n_rover_states, n_Q))
     G[0, 0] = dt*np.cos(psi)
@@ -311,10 +326,10 @@ def slam_update(t, estimate, measurements, sim_params):
         z = np.zeros((0, 1))
         zhat = np.zeros((0, 1))
         for i_id, mapped_id in enumerate(mapped_ids):
-            marker = vis_markers[i_meas]
-            pose = marker['pose']
+            marker = marker_lookup(vis_old_markers, mapped_id)
             # Only update for known, visible markers
-            if marker['id'] == mapped_id:
+            if marker is not None:
+                pose = marker['pose']
                 # Array indices for building H
                 k_meas = i_meas*meas_dim  # Measurement index
                 k_mark = i_id*meas_dim  # Marker index
@@ -332,6 +347,8 @@ def slam_update(t, estimate, measurements, sim_params):
                 meas_hat = cart_to_polar(rel_pos, rover_state[2, 0])  # Range/bearing in body frame
                 zhat = np.concatenate((zhat, meas_hat), 0)
                 i_meas += 1
+            if i_meas == n_meas:
+                break
         # Calculate innovation
         innov = z - zhat
 

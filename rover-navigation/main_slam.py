@@ -30,6 +30,8 @@ def init_sim(seed=0):
     sim_params['environment'] = environment.init_circular_table()
     # SLAM
     sim_params['slam'] = navigation.init_slam()
+    # Control
+    sim_params['control'] = control.init_waypoint_following()
     return sim_params
 
 
@@ -112,14 +114,20 @@ def plot_map(sim_out, sim_params, i_sample=0):
     estimate = sim_out['estimate'][i_sample]
     fig, ax = plt.subplots()
 
+    # Plot rover trajectory
+    rover_state_hist = np.array(sim_out['rover_state'][0:i_sample+1])
+    x, y = (rover_state_hist[:, 0], rover_state_hist[:, 1])
+    # Rover XY Trajectory
+    ax.plot(x, y, 'k')
+
     # Plot rover position
     ax.plot(rover_state[0], rover_state[1], 'g^')
 
     # Plot camera field of view
     rang = sim_params['sensors']['camera']['range']
     fov = sim_params['sensors']['camera']['field_of_view']
-    psi = rover_state[2, 0]
-    fov_wedge = Wedge(rover_state[0:2, 0], rang, (fov[0]-psi)*180/np.pi, (fov[1]-psi)*180/np.pi,
+    psi = rover_state[3, 0]
+    fov_wedge = Wedge(rover_state[0:2, 0], rang, (fov[0]+psi)*180/np.pi, (fov[1]+psi)*180/np.pi,
                       edgecolor='black', facecolor='orange')
     ax.add_patch(fov_wedge)
 
@@ -175,7 +183,7 @@ if __name__ == "__main__":
         env = environment.circular_table(t, sim_params)
         measurements = sensors.imu_camera(t, rover_state, env, sim_params)
         estimate = navigation.slam(t, estimate, measurements, cmd, sim_params)
-        cmd = control.waypoint_following(t, rover_state, estimate, sim_params, use_truth=True)
+        cmd, sim_params = control.waypoint_following(t, rover_state, estimate, sim_params, use_truth=True)
         rover_state, d_rover_state = dynamics.no_slip_dynamics(t, rover_state, env, cmd, sim_params)
         sim_out = write_sim_output(t, sim_out, env, measurements, estimate, cmd, rover_state)
     # Print/store outputs
